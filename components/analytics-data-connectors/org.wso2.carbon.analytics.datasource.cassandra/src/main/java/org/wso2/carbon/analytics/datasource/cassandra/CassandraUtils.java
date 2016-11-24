@@ -41,17 +41,12 @@ public class CassandraUtils {
         return new String[] { GenericUtils.normalizePath(parent), child };
     }
     
-    public static String generateCreateKeyspaceQuery(String ks,
+    public static String generateCreateKeyspaceQuery(String ks, 
             Map<String, String> properties) throws AnalyticsException {
         String className = extractClass(properties);
-        String query = "CREATE KEYSPACE IF NOT EXISTS " + ks + " WITH REPLICATION = {'class':'" + className + "'";
-        if (className.equals("SimpleStrategy")) {
-            int replicationFactor = extractReplicationFactor(properties);
-            query += ", 'replication_factor':" + replicationFactor + "}";
-        } else {
-            query += "}";
-        }
-        return query;
+        int replicationFactor = extractReplicationFactor(properties);
+        return "CREATE KEYSPACE IF NOT EXISTS " + ks + " WITH REPLICATION = {'class':'" + className + 
+                "', 'replication_factor':" + replicationFactor + "}";
     }
     
     public static String extractDataSourceName(Map<String, String> properties) throws AnalyticsException {
