@@ -107,7 +107,7 @@ public class AnalyticsEventStoreDeployer extends AbstractDeployer {
                         ServiceHolder.getAnalyticsDataAPI().createTable(tenantId, eventStore.getName());
                     } else {
                         ServiceHolder.getAnalyticsDataAPI().createTable(tenantId, eventStore.getRecordStore(),
-                                                                        eventStore.getName());
+                                eventStore.getName());
                     }
                 }
                 ServiceHolder.getAnalyticsDataAPI().setTableSchema(tenantId, eventStore.getName(),
