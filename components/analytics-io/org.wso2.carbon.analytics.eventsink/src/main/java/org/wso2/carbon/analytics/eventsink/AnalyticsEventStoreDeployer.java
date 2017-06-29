@@ -102,11 +102,13 @@ public class AnalyticsEventStoreDeployer extends AbstractDeployer {
         try {
             AnalyticsEventStoreManager.getInstance().addEventStoreConfiguration(tenantId, eventStore);
             if (this.eventSinkEnabled) {
-                if (eventStore.getRecordStore() == null) {
-                    ServiceHolder.getAnalyticsDataAPI().createTable(tenantId, eventStore.getName());
-                } else {
-                    ServiceHolder.getAnalyticsDataAPI().createTable(tenantId, eventStore.getRecordStore(),
-                            eventStore.getName());
+                if (!ServiceHolder.getAnalyticsDataAPI().tableExists(tenantId, eventStore.getName())) {
+                    if (eventStore.getRecordStore() == null) {
+                        ServiceHolder.getAnalyticsDataAPI().createTable(tenantId, eventStore.getName());
+                    } else {
+                        ServiceHolder.getAnalyticsDataAPI().createTable(tenantId, eventStore.getRecordStore(),
+                                                                        eventStore.getName());
+                    }
                 }
                 ServiceHolder.getAnalyticsDataAPI().setTableSchema(tenantId, eventStore.getName(),
                         this.resolveAndMergeSchemata(tenantId, eventStore));
