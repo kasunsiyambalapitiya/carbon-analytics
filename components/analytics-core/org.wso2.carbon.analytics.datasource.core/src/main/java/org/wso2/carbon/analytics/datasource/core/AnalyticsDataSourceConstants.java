@@ -27,4 +27,10 @@ public class AnalyticsDataSourceConstants {
     
     public static final String CARBON_HOME_VAR = "$CARBON_HOME";
 
+    public static final String SYS_PROPERTY_PROVIDERS = "ds.providers";
+    public static final String SYS_PROPERTY_BASE = "ds.definition.";
+    public static final String SYS_PROPERTY_IV = "ds.iv";
+    public static final String SYS_PROPERTY_KEY_ALIAS = "ds.key.alias";
+    public static final String SYS_PROPERTY_KEY_PASS = "ds.key.pass";
+
 }
