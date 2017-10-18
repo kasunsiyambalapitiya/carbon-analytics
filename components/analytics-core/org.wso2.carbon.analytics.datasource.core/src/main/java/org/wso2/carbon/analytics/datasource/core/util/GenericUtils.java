@@ -67,6 +67,8 @@ import static org.wso2.carbon.analytics.datasource.core.AnalyticsDataSourceConst
 import static org.wso2.carbon.analytics.datasource.core.AnalyticsDataSourceConstants.SYS_PROPERTY_IV;
 import static org.wso2.carbon.analytics.datasource.core.AnalyticsDataSourceConstants.SYS_PROPERTY_KEY_ALIAS;
 import static org.wso2.carbon.analytics.datasource.core.AnalyticsDataSourceConstants.SYS_PROPERTY_KEY_PASS;
+import static org.wso2.carbon.analytics.datasource.core.AnalyticsDataSourceConstants.SYS_PROPERTY_KEY_STORE_PASSWORD;
+import static org.wso2.carbon.analytics.datasource.core.AnalyticsDataSourceConstants.SYS_PROPERTY_KEY_STORE;
 import static org.wso2.carbon.analytics.datasource.core.AnalyticsDataSourceConstants.SYS_PROPERTY_PROVIDERS;
 
 
@@ -511,18 +513,21 @@ public class GenericUtils {
     private static Cipher initializeCipher() throws Exception {
         String keyAlias = System.getProperty(SYS_PROPERTY_KEY_ALIAS);
         String keyPass = System.getProperty(SYS_PROPERTY_KEY_PASS);
+        String keyStore = System.getProperty(SYS_PROPERTY_KEY_STORE);
+        String keyStorePassword = System.getProperty(SYS_PROPERTY_KEY_STORE_PASSWORD);
         byte[] iv = Base64.decode(System.getProperty(SYS_PROPERTY_IV));
-        return initializeBasicCipher(keyAlias, keyPass, iv);
+        return initializeBasicCipher(keyAlias, keyPass, keyStore, keyStorePassword, iv);
     }
 
     private static String decryptDS(Cipher cipher, String encryptedDS) throws Exception {
         return new String(cipher.doFinal(Base64.decode(encryptedDS)), StandardCharsets.UTF_8);
     }
 
-    public static Cipher initializeBasicCipher(String keyAlias, String keyPass, byte[] iv) throws Exception {
+    public static Cipher initializeBasicCipher(String keyAlias, String keyPass, String keyStore,
+                                               String keyStorePassword, byte[] iv) throws Exception {
         KeyStore ks = KeyStore.getInstance("JKS");
-        InputStream in = new FileInputStream(System.getProperty("javax.net.ssl.keyStore"));
-        ks.load(in, System.getProperty("javax.net.ssl.keyStorePassword").toCharArray());
+        InputStream in = new FileInputStream(keyStore);
+        ks.load(in, keyStorePassword.toCharArray());
         in.close();
         ByteBuffer buffer = ByteBuffer.allocate(16);
         Key key = ks.getKey(keyAlias, keyPass.toCharArray());

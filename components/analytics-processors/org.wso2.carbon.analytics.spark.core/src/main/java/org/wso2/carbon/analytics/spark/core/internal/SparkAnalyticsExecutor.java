@@ -108,6 +108,8 @@ import static org.wso2.carbon.analytics.datasource.core.AnalyticsDataSourceConst
 import static org.wso2.carbon.analytics.datasource.core.AnalyticsDataSourceConstants.SYS_PROPERTY_IV;
 import static org.wso2.carbon.analytics.datasource.core.AnalyticsDataSourceConstants.SYS_PROPERTY_KEY_ALIAS;
 import static org.wso2.carbon.analytics.datasource.core.AnalyticsDataSourceConstants.SYS_PROPERTY_KEY_PASS;
+import static org.wso2.carbon.analytics.datasource.core.AnalyticsDataSourceConstants.SYS_PROPERTY_KEY_STORE;
+import static org.wso2.carbon.analytics.datasource.core.AnalyticsDataSourceConstants.SYS_PROPERTY_KEY_STORE_PASSWORD;
 import static org.wso2.carbon.analytics.datasource.core.AnalyticsDataSourceConstants.SYS_PROPERTY_PROVIDERS;
 
 
@@ -161,6 +163,8 @@ public class SparkAnalyticsExecutor implements GroupEventListener {
     private static Map<String, String> dataSources;
     private String keyAlias;
     private String keyPass;
+    private String keyStore;
+    private String keyStorePassword;
     private String initVector;
 
     private ClusterMode clusterMode;
@@ -664,6 +668,8 @@ public class SparkAnalyticsExecutor implements GroupEventListener {
             }
             jvmOpts = jvmOpts + " -D" + SYS_PROPERTY_KEY_ALIAS + "=" + keyAlias;
             jvmOpts = jvmOpts + " -D" + SYS_PROPERTY_KEY_PASS + "=" + keyPass;
+            jvmOpts = jvmOpts + " -D" + SYS_PROPERTY_KEY_STORE + "=" + keyStore;
+            jvmOpts = jvmOpts + " -D" + SYS_PROPERTY_KEY_STORE_PASSWORD + "=" + keyStorePassword;
 
             for (Map.Entry<String, String> entry : dataSources.entrySet()) {
                 jvmOpts = jvmOpts + " -D" + entry.getKey() + "=" + entry.getValue();
@@ -729,7 +735,9 @@ public class SparkAnalyticsExecutor implements GroupEventListener {
                 int counter = 1;
                 keyAlias = ServiceHolder.getServerConfigService().getFirstProperty("Security.KeyStore.KeyAlias");
                 keyPass = ServiceHolder.getServerConfigService().getFirstProperty("Security.KeyStore.KeyPassword");
-                Cipher cipher = this.initializeCipher(keyAlias, keyPass);
+                keyStore = ServiceHolder.getServerConfigService().getFirstProperty("Security.KeyStore.Location");
+                keyStorePassword = ServiceHolder.getServerConfigService().getFirstProperty("Security.KeyStore.Password");
+                Cipher cipher = this.initializeCipher(keyAlias, keyPass, keyStore, keyStorePassword);
                 Iterator<CarbonDataSource> iterator = org.wso2.carbon.analytics.datasource.core.internal.ServiceHolder
                         .getDataSourceService().getAllDataSources().iterator();
                 while (iterator.hasNext()) {
@@ -796,8 +804,8 @@ public class SparkAnalyticsExecutor implements GroupEventListener {
         return sb.toString();
     }
 
-    private Cipher initializeCipher(String keyAlias, String keyPass) throws Exception {
-        Cipher cipher = GenericUtils.initializeBasicCipher(keyAlias, keyPass, null);
+    private Cipher initializeCipher(String keyAlias, String keyPass, String keyStore, String keyStorePassword) throws Exception {
+        Cipher cipher = GenericUtils.initializeBasicCipher(keyAlias, keyPass, keyStore, keyStorePassword, null);
         AlgorithmParameters params = cipher.getParameters();
         initVector = Base64.encode(params.getParameterSpec(IvParameterSpec.class).getIV());
         return cipher;
