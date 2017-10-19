@@ -62,28 +62,11 @@ import org.wso2.siddhi.query.api.expression.Variable;
 import org.wso2.siddhi.query.api.expression.condition.And;
 import org.wso2.siddhi.query.api.expression.condition.Compare;
 import org.wso2.siddhi.query.api.expression.condition.Or;
-import org.wso2.siddhi.query.api.expression.constant.BoolConstant;
-import org.wso2.siddhi.query.api.expression.constant.Constant;
-import org.wso2.siddhi.query.api.expression.constant.DoubleConstant;
-import org.wso2.siddhi.query.api.expression.constant.FloatConstant;
-import org.wso2.siddhi.query.api.expression.constant.IntConstant;
-import org.wso2.siddhi.query.api.expression.constant.LongConstant;
-import org.wso2.siddhi.query.api.expression.constant.StringConstant;
-import org.wso2.siddhi.query.api.expression.math.Add;
-import org.wso2.siddhi.query.api.expression.math.Divide;
-import org.wso2.siddhi.query.api.expression.math.Multiply;
-import org.wso2.siddhi.query.api.expression.math.Subtract;
+import org.wso2.siddhi.query.api.expression.constant.*;
 import org.wso2.siddhi.query.api.util.AnnotationHelper;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.Map.Entry;
-import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -873,14 +856,14 @@ public class AnalyticsEventTable implements EventTable {
             return query;
         }
 
-        private String generateLuceneQueryCacheKey(String query) {
-            return AnalyticsEventTableConstants.CACHE_KEY_PREFIX_LUCENE + this.tenantId + ":" + this.tableName + ":" + query;
+        private String generateLuceneQueryCacheKey(String query, boolean countOnly) {
+            return AnalyticsEventTableConstants.CACHE_KEY_PREFIX_LUCENE + this.tenantId + ":" + this.tableName + ":"  + countOnly  + ":" + query;
         }
 
         private List<Record> executeLuceneQuery(ComplexEvent matchingEvent, boolean countOnly) {
             String query = this.getTranslatedLuceneQuery(matchingEvent);
             if (isCaching()) {
-                String key = this.generateLuceneQueryCacheKey(query);
+                String key = this.generateLuceneQueryCacheKey(query, countOnly);
                 List<Record> records = getCache().get(key);
                 if (records == null) {
                     records = this.executeLuceneQueryDirect(query, countOnly);
