@@ -1541,17 +1541,10 @@ public class AnalyticsDataIndexer {
             String values = obj.toString();
             String[] facetArray = new String[]{};
             try {
-                if (analyticsFacetConfig.isEnabled()) {
-                    if (values.isEmpty()) {
-                        values = analyticsFacetConfig.getFacetDefaultValue(tableName, field);
-                    }
-                    facetArray = values.split(analyticsFacetConfig.getFacetSplitter(tableName, field));
-                } else {
-                    if (values.isEmpty()) {
-                        values = EMPTY_FACET_VALUE;
-                    }
-                    facetArray = values.split(",");
+                if (values.isEmpty()) {
+                    values = analyticsFacetConfig.getFacetDefaultValue(tableName, field);
                 }
+                facetArray = values.split(analyticsFacetConfig.getFacetSplitter(tableName, field));
                 doc.add(new FacetField(field, facetArray));
             } catch (IllegalArgumentException e) {
                 if (analyticsFacetConfig.isEnabled()) {
@@ -1565,8 +1558,8 @@ public class AnalyticsDataIndexer {
                     }
                     doc.add(new FacetField(field, facetElements.toArray(new String[facetElements.size()])));
                 } else {
-                    log.error("Ignoring the record to be indexed as facet, Record details: " + getRecordInfo(record) + ", Error: " +
-                            e.getMessage(), e);
+                    log.error("Ignoring the record to be indexed as facet, Record details: " + getRecordInfo(record) +
+                            ", Error: " + e.getMessage(), e);
                 }
             }
         }
