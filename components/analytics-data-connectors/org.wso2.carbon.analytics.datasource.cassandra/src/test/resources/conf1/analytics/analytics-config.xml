@@ -18,6 +18,16 @@
         <!--cacheSize is only valid for cacheType "LRU". the size is given in Bytes-->
         <!--<cacheSize>4096</cacheSize>-->
     </taxonomy-writer-cache>
+    <facet-configuration enabled = "true">
+        <facet-splitter>,</facet-splitter>
+        <facet-default-value>NULL</facet-default-value>
+        <tables>
+            <table name="TABLEY">
+                <facet-splitter>,</facet-splitter>
+                <facet-default-value>EMPTY_FACET_VALUE!</facet-default-value>
+            </table>
+        </tables>
+    </facet-configuration>
     <!-- The data indexing analyzer implementation -->
     <analytics-lucene-analyzer>
         <implementation>org.apache.lucene.analysis.standard.StandardAnalyzer</implementation>
