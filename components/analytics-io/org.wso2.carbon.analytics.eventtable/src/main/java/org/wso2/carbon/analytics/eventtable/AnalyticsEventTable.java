@@ -348,7 +348,7 @@ public class AnalyticsEventTable implements EventTable {
         return finder.contains(matchingEvent, null);
     }
 
-    @SuppressWarnings({ "rawtypes", "unchecked" })
+    @SuppressWarnings({"rawtypes", "unchecked"})
     @Override
     public void delete(ComplexEventChunk deletingEventChunk, Operator operator) {
         operator.delete(deletingEventChunk, null);
@@ -387,6 +387,8 @@ public class AnalyticsEventTable implements EventTable {
     public class AnalyticsTableOperator implements Operator {
 
         private static final String LUCENE_QUERY_PARAM = "e267ba83-0c77-4e0d-9c5f-cd3a31dbe2d3";
+
+        private static final String LUCENE_CONSTANT_PARAM = "e267ba83-0c77-4e0d-9c5f-cd3a31dbe2d4";
 
         private int tenantId;
 
@@ -429,6 +431,10 @@ public class AnalyticsEventTable implements EventTable {
 
         private Map<String, Object> primaryKeyRHSValues;
 
+        private List<String> mentionedConstants;
+
+        private int constantIndex = 0;
+
         private TableDefinition tableDefinition;
 
         public AnalyticsTableOperator(int tenantId, String tableName, List<Attribute> attrs, Expression expression,
@@ -448,6 +454,7 @@ public class AnalyticsEventTable implements EventTable {
             this.candidatePrimaryKeySet = new HashSet<>();
             this.indexedKeySet = new HashSet<String>();
             this.mentionedFields = new HashSet<String>();
+            this.mentionedConstants = new ArrayList<>();
             this.primaryKeyRHSValues = new LinkedHashMap<>();
             this.initMetaStateEvent();
             /* first parse for evaluating the query, since expression evaluation cannot be
@@ -478,8 +485,12 @@ public class AnalyticsEventTable implements EventTable {
                     throw new IllegalStateException("Unable to lookup table schema: " + e.getMessage(), e);
                 }
                 this.luceneQuery = this.luceneQueryFromExpression(this.expression, false).toString();
+                for (int i = 0; i < this.constantIndex; i++) {
+                    this.luceneQuery = this.luceneQuery.replace(LUCENE_CONSTANT_PARAM + i, this.mentionedConstants.get(i));
+                }
                 Set<String> nonIndixedFields = new HashSet<String>(this.mentionedFields);
                 nonIndixedFields.removeAll(this.indexedKeySet);
+                nonIndixedFields.removeAll(this.mentionedConstants);
                 if (!this.pkMatchCompatible && nonIndixedFields.size() > 0) {
                     throw new IllegalStateException("The table [" + this.tenantId + ", " + this.tableName +
                             "] requires the field(s): " + nonIndixedFields +
@@ -549,7 +560,7 @@ public class AnalyticsEventTable implements EventTable {
                 String field;
                 Object rhs;
                 org.wso2.siddhi.query.api.expression.condition.Compare.Operator operator = compare.getOperator();
-                if (origRHS.toString().startsWith(LUCENE_QUERY_PARAM)) {
+                if (origRHS.toString().startsWith(LUCENE_QUERY_PARAM) || origRHS.toString().startsWith(LUCENE_CONSTANT_PARAM)) {
                     field = origLHS.toString();
                     rhs = origRHS;
                 } else {
@@ -613,13 +624,15 @@ public class AnalyticsEventTable implements EventTable {
                     case NOT_EQUAL:
                         this.pkMatchCompatible = false;
                         this.mentionedFields.add(field);
-                        return "(-" + Constants.NON_TOKENIZED_FIELD_PREFIX + field + ": " +
-                                luceneQueryFromExpression(compare.getRightExpression(), firstPass) + ")";
+                        return "(*:* AND NOT (" + Constants.NON_TOKENIZED_FIELD_PREFIX + field + ": " +
+                                luceneQueryFromExpression(compare.getRightExpression(), firstPass) + "))";
                     default:
                         return true;
                 }
             } else if (expr instanceof Constant) {
-                return this.returnConstantValue((Constant) expr);
+                Object constantValue = this.returnConstantValue((Constant) expr);
+                this.mentionedConstants.add(constantValue.toString());
+                return LUCENE_CONSTANT_PARAM + (this.constantIndex++);
             } else if (expr instanceof Variable) {
                 Variable var = (Variable) expr;
                 if (eventTableRefs.contains(var.getStreamId())) {
@@ -635,9 +648,6 @@ public class AnalyticsEventTable implements EventTable {
                         return LUCENE_QUERY_PARAM + (this.paramIndex++);
                     }
                 }
-            } else if (expr instanceof Subtract || expr instanceof Add || expr instanceof Multiply ||
-                    expr instanceof Divide || expr instanceof org.wso2.siddhi.query.api.expression.math.Mod) {
-                throw new IllegalArgumentException("Analytics Event Table conditions does not support arithmetic operations: " + expr);
             } else {
                 return true;
             }
@@ -756,7 +766,7 @@ public class AnalyticsEventTable implements EventTable {
             }
             if (log.isDebugEnabled()) {
                 long end = System.currentTimeMillis();
-                log.debug("Find Records (CountOnly: " + countOnly + "): " + records.size() + 
+                log.debug("Find Records (CountOnly: " + countOnly + "): " + records.size() +
                         ", Time: " + (end - start) + " ms -> " + this.tenantId + ":" + this.tableName);
             }
             return records;
@@ -857,24 +867,24 @@ public class AnalyticsEventTable implements EventTable {
             return query;
         }
 
-        private String generateLuceneQueryCacheKey(String query) {
-            return AnalyticsEventTableConstants.CACHE_KEY_PREFIX_LUCENE + this.tenantId + ":" + this.tableName + ":" + query;
+        private String generateLuceneQueryCacheKey(String query, boolean countOnly) {
+            return AnalyticsEventTableConstants.CACHE_KEY_PREFIX_LUCENE + this.tenantId + ":" + this.tableName + ":"  + countOnly  + ":" + query;
         }
 
         private List<Record> executeLuceneQuery(ComplexEvent matchingEvent, boolean countOnly) {
             String query = this.getTranslatedLuceneQuery(matchingEvent);
             if (isCaching()) {
-                String key = this.generateLuceneQueryCacheKey(query);
+                String key = this.generateLuceneQueryCacheKey(query, countOnly);
                 List<Record> records = getCache().get(key);
                 if (records == null) {
                     records = this.executeLuceneQueryDirect(query, countOnly);
                     getCache().put(key, records);
                     if (log.isDebugEnabled()) {
-                        log.debug("Cache updated for lucene query (CountOnly: " + countOnly + "): " + this.tenantId + 
+                        log.debug("Cache updated for lucene query (CountOnly: " + countOnly + "): " + this.tenantId +
                                 ":" + this.tableName + " -> " + query);
                     }
                 } else if (log.isDebugEnabled()) {
-                    log.debug("Cache HIT for lucene query (CountOnly: " + countOnly + "): " + this.tenantId + 
+                    log.debug("Cache HIT for lucene query (CountOnly: " + countOnly + "): " + this.tenantId +
                             ":" + this.tableName + " -> " + query);
                 }
                 return records;
@@ -882,11 +892,11 @@ public class AnalyticsEventTable implements EventTable {
                 return this.executeLuceneQueryDirect(query, countOnly);
             }
         }
-        
+
         private Record generateCountRecord(int count) {
-            return new Record(count, "",  null, 0);
+            return new Record(count, "", null, 0);
         }
-        
+
         private int extractCountFromRecord(Record record) {
             return record.getTenantId();
         }

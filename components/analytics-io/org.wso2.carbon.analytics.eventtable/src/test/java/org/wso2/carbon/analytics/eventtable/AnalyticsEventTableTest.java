@@ -35,6 +35,7 @@ import org.wso2.siddhi.core.SiddhiManager;
 import org.wso2.siddhi.core.event.Event;
 import org.wso2.siddhi.core.query.output.callback.QueryCallback;
 import org.wso2.siddhi.core.stream.input.InputHandler;
+import org.wso2.siddhi.core.stream.output.StreamCallback;
 import org.wso2.siddhi.core.util.EventPrinter;
 
 import javax.naming.NamingException;
@@ -215,12 +216,78 @@ public class AnalyticsEventTableTest {
         stockStream.send(new Object[] { "WSO2", 55.6f, 100l });
         stockStream.send(new Object[] { "IBM", 75.6f, 10l });
         Thread.sleep(DEFAULT_WAIT_TIME);
-        
+
         checkStockStream.send(new Object[] { "WSO2" });
         Thread.sleep(DEFAULT_WAIT_TIME);
 
         Assert.assertEquals(2, this.inEventCount);
         Assert.assertEquals(0, this.removeEventCount);
+        Assert.assertEquals(true, this.eventArrived);
+
+        executionPlanRuntime.shutdown();
+        siddhiManager.shutdown();
+        this.service.deleteTable(-1, "stocks");
+        this.cleanupCommonProps();
+    }
+
+    @Test
+    public void testJoin1WithCacheAndContains() throws InterruptedException, AnalyticsException {
+        this.cleanupCommonProps();
+        this.service.deleteTable(-1, "stocks");
+        SiddhiManager siddhiManager = new SiddhiManager();
+
+        String streams = "" +
+            "define stream StockStream (symbol string, id string, price float, volume long); " +
+            "define stream CheckStockStream (symbol string, id string, price float, volume long); " +
+            "@from(eventtable = 'analytics.table' , table.name = 'stocks', primary.keys = 'symbol', caching='true', cache.timeout.seconds='300', indices='symbol, price', wait.for.indexing = 'true', max.search.result.count='10') " +
+            "define table StockTable (symbol string, id string , price float, volume long); ";
+
+        String query = "" +
+            "@info(name = 'query1') " +
+            "from StockStream " +
+            "insert into StockTable;" +
+            "" +
+            "@info(name = 'query2')" +
+            "from StockStream[(not ((symbol == StockTable.symbol AND price == StockTable.price) in StockTable))] " +
+            "select symbol, id, price, volume " +
+            "insert into temp;" +
+            "" +
+            "@info(name = 'query3')" +
+            "from CheckStockStream join StockTable " +
+            "on (CheckStockStream.symbol == StockTable.symbol AND CheckStockStream.price == StockTable.price) " +
+            "select CheckStockStream.symbol, StockTable.id, StockTable.price, StockTable.volume " +
+            "insert into OutputStream;" ;
+
+        ExecutionPlanRuntime executionPlanRuntime = siddhiManager.createExecutionPlanRuntime(streams + query);
+
+        executionPlanRuntime.addCallback("OutputStream", new StreamCallback() {
+            @Override
+            public void receive(Event[] events) {
+                if (events != null) {
+                    for (Event event : events) {
+                        EventPrinter.print(events);
+                        inEventCount++;
+                    }
+                    eventArrived = true;
+                }
+            }
+        });
+
+        InputHandler stockStream = executionPlanRuntime.getInputHandler("StockStream");
+        InputHandler checkStockStream = executionPlanRuntime.getInputHandler("CheckStockStream");
+
+        executionPlanRuntime.start();
+
+        stockStream.send(new Object[] { "WSO2", "1", 30.0f, 100l });
+        stockStream.send(new Object[] { "WSO2", "1", 20.0f, 200l });
+        stockStream.send(new Object[] { "WSO2", "1", 10.0f, 300l });
+
+        checkStockStream.send(new Object[] { "WSO2", "1", 10.0f, 100l });
+
+
+        Thread.sleep(DEFAULT_WAIT_TIME);
+
+        Assert.assertEquals(this.inEventCount, 1);
         Assert.assertEquals(true, this.eventArrived);
 
         executionPlanRuntime.shutdown();
@@ -1069,5 +1136,597 @@ public class AnalyticsEventTableTest {
         x.destroy();
         System.exit(0);
     }
-    
+
+    @Test
+    public void testFilter1() throws InterruptedException, AnalyticsException {
+        this.cleanupCommonProps();
+        this.service.deleteTable(-1, "stocks");
+        SiddhiManager siddhiManager = new SiddhiManager();
+
+        String streams = "" +
+                "define stream StockStream (symbol string, price float, volume long); " +
+                "define stream CheckStockStream (symbol string, volume long, price float); " +
+                "@from(eventtable = 'analytics.table' , table.name = 'stocks', indices = 'symbol, price, volume') " +
+                "define table StockTable (symbol string, price float, volume long); ";
+
+        String query = "" +
+                "@info(name = 'query1') " +
+                "from StockStream " +
+                "insert into StockTable ;" +
+                "" +
+                "@info(name = 'query3') " +
+                "from CheckStockStream[(symbol==StockTable.symbol or volume>=StockTable.volume) in StockTable] " +
+                "insert into OutStream;";
+
+        ExecutionPlanRuntime executionPlanRuntime = siddhiManager.createExecutionPlanRuntime(streams + query);
+
+        executionPlanRuntime.addCallback("query3", new QueryCallback() {
+            @Override
+            public void receive(long timeStamp, Event[] inEvents, Event[] removeEvents) {
+                EventPrinter.print(timeStamp, inEvents, removeEvents);
+                if (inEvents != null) {
+                    for (Event event : inEvents) {
+                        inEventCount++;
+                        switch (inEventCount) {
+                            case 1:
+                                Assert.assertEquals(event.getData(), new Object[] { "IBM", 200l, 154.6f });
+                                break;
+                            case 2:
+                                Assert.assertEquals(event.getData(), new Object[] { "WSO22", 300l, 44.6f });
+                                break;
+                            default:
+                                Assert.assertEquals(2, inEventCount);
+                        }
+                    }
+                    eventArrived = true;
+                }
+                if (removeEvents != null) {
+                    removeEventCount = removeEventCount + removeEvents.length;
+                }
+                eventArrived = true;
+            }
+
+        });
+
+        InputHandler stockStream = executionPlanRuntime.getInputHandler("StockStream");
+        InputHandler checkStockStream = executionPlanRuntime.getInputHandler("CheckStockStream");
+
+        executionPlanRuntime.start();
+
+        stockStream.send(new Object[] { "WSO2", 55.6f, 100l });
+        stockStream.send(new Object[] { "IBM", 155.6f, 100l });
+        checkStockStream.send(new Object[] { "IBM", 200l, 154.6f });
+        checkStockStream.send(new Object[] { "WSO22", 300l, 44.6f });
+        Thread.sleep(DEFAULT_WAIT_TIME);
+
+        Assert.assertEquals(inEventCount, 2);
+        Assert.assertEquals(removeEventCount, 0);
+        Assert.assertEquals(eventArrived, true);
+
+        executionPlanRuntime.shutdown();
+        siddhiManager.shutdown();
+
+        this.service.deleteTable(-1, "stocks");
+        this.cleanupCommonProps();
+    }
+
+    @Test
+    public void testFilter2() throws InterruptedException, AnalyticsException {
+        this.cleanupCommonProps();
+        this.service.deleteTable(-1, "stocks");
+        SiddhiManager siddhiManager = new SiddhiManager();
+
+        String streams = "" +
+                "define stream StockStream (symbol string, price float, volume long); " +
+                "define stream CheckStockStream (symbol string, volume long, price float); " +
+                "@from(eventtable = 'analytics.table' , table.name = 'stocks', indices = 'symbol, price, volume') " +
+                "define table StockTable (symbol string, price float, volume long); ";
+
+        String query = "" +
+                "@info(name = 'query1') " +
+                "from StockStream " +
+                "insert into StockTable ;" +
+                "" +
+                "@info(name = 'query3') " +
+                "from CheckStockStream[(symbol==StockTable.symbol or volume<=StockTable.volume) in StockTable] " +
+                "insert into OutStream;";
+
+        ExecutionPlanRuntime executionPlanRuntime = siddhiManager.createExecutionPlanRuntime(streams + query);
+
+        executionPlanRuntime.addCallback("query3", new QueryCallback() {
+            @Override
+            public void receive(long timeStamp, Event[] inEvents, Event[] removeEvents) {
+                EventPrinter.print(timeStamp, inEvents, removeEvents);
+                if (inEvents != null) {
+                    for (Event event : inEvents) {
+                        inEventCount++;
+                        switch (inEventCount) {
+                            case 1:
+                                Assert.assertEquals(event.getData(), new Object[] { "IBM", 200l, 154.6f });
+                                break;
+                            default:
+                                Assert.assertEquals(2, inEventCount);
+                        }
+                    }
+                    eventArrived = true;
+                }
+                if (removeEvents != null) {
+                    removeEventCount = removeEventCount + removeEvents.length;
+                }
+                eventArrived = true;
+            }
+
+        });
+
+        InputHandler stockStream = executionPlanRuntime.getInputHandler("StockStream");
+        InputHandler checkStockStream = executionPlanRuntime.getInputHandler("CheckStockStream");
+
+        executionPlanRuntime.start();
+
+        stockStream.send(new Object[] { "WSO2", 55.6f, 100l });
+        stockStream.send(new Object[] { "IBM", 155.6f, 100l });
+        Thread.sleep(DEFAULT_WAIT_TIME);
+        checkStockStream.send(new Object[] { "IBM", 200l, 154.6f });
+        Thread.sleep(DEFAULT_WAIT_TIME);
+
+        Assert.assertEquals(inEventCount, 1);
+        Assert.assertEquals(removeEventCount, 0);
+        Assert.assertEquals(eventArrived, true);
+
+        executionPlanRuntime.shutdown();
+        siddhiManager.shutdown();
+
+        this.service.deleteTable(-1, "stocks");
+        this.cleanupCommonProps();
+    }
+
+    @Test
+    public void testFilter3() throws InterruptedException, AnalyticsException {
+        this.cleanupCommonProps();
+        this.service.deleteTable(-1, "stocks");
+        SiddhiManager siddhiManager = new SiddhiManager();
+
+        String streams = "" +
+                "define stream StockStream (symbol string, price float, volume long); " +
+                "define stream CheckStockStream (symbol string, volume long, price float); " +
+                "@from(eventtable = 'analytics.table' , table.name = 'stocks', indices = 'symbol, price, volume') " +
+                "define table StockTable (symbol string, price float, volume long); ";
+
+        String query = "" +
+                "@info(name = 'query1') " +
+                "from StockStream " +
+                "insert into StockTable ;" +
+                "" +
+                "@info(name = 'query3') " +
+                "from CheckStockStream[(symbol==StockTable.symbol or volume>StockTable.volume) in StockTable] " +
+                "insert into OutStream;";
+
+        ExecutionPlanRuntime executionPlanRuntime = siddhiManager.createExecutionPlanRuntime(streams + query);
+
+        executionPlanRuntime.addCallback("query3", new QueryCallback() {
+            @Override
+            public void receive(long timeStamp, Event[] inEvents, Event[] removeEvents) {
+                EventPrinter.print(timeStamp, inEvents, removeEvents);
+                if (inEvents != null) {
+                    for (Event event : inEvents) {
+                        inEventCount++;
+                        switch (inEventCount) {
+                            case 1:
+                                Assert.assertEquals(event.getData(), new Object[] { "WSO22", 300l, 44.6f });
+                                break;
+                            default:
+                                Assert.assertEquals(2, inEventCount);
+                        }
+                    }
+                    eventArrived = true;
+                }
+                if (removeEvents != null) {
+                    removeEventCount = removeEventCount + removeEvents.length;
+                }
+                eventArrived = true;
+            }
+
+        });
+
+        InputHandler stockStream = executionPlanRuntime.getInputHandler("StockStream");
+        InputHandler checkStockStream = executionPlanRuntime.getInputHandler("CheckStockStream");
+
+        executionPlanRuntime.start();
+
+        stockStream.send(new Object[] { "WSO2", 55.6f, 100l });
+        stockStream.send(new Object[] { "IBM", 155.6f, 100l });
+        Thread.sleep(DEFAULT_WAIT_TIME);
+        checkStockStream.send(new Object[] { "WSO22", 300l, 44.6f });
+        Thread.sleep(DEFAULT_WAIT_TIME);
+
+        Assert.assertEquals(inEventCount, 1);
+        Assert.assertEquals(removeEventCount, 0);
+        Assert.assertEquals(eventArrived, true);
+
+        executionPlanRuntime.shutdown();
+        siddhiManager.shutdown();
+
+        this.service.deleteTable(-1, "stocks");
+        this.cleanupCommonProps();
+    }
+
+    @Test
+    public void testFilter4() throws InterruptedException, AnalyticsException {
+        this.cleanupCommonProps();
+        this.service.deleteTable(-1, "stocks");
+        SiddhiManager siddhiManager = new SiddhiManager();
+
+        String streams = "" +
+                "define stream StockStream (symbol string, price int, volume long); " +
+                "define stream CheckStockStream (symbol string, volume long, price int); " +
+                "@from(eventtable = 'analytics.table' , table.name = 'stocks', indices = 'symbol, price, volume') " +
+                "@IndexBy('price')" +
+                "define table StockTable (symbol string, price int, volume long); ";
+
+        String query = "" +
+                "@info(name = 'query1') " +
+                "from StockStream " +
+                "insert into StockTable ;" +
+                "" +
+                "@info(name = 'query3') " +
+                "from CheckStockStream[(StockTable.price <= 55 ) in StockTable] " +
+                "insert into OutStream;";
+
+        ExecutionPlanRuntime executionPlanRuntime = siddhiManager.createExecutionPlanRuntime(streams + query);
+
+        executionPlanRuntime.addCallback("query3", new QueryCallback() {
+            @Override
+            public void receive(long timeStamp, Event[] inEvents, Event[] removeEvents) {
+                EventPrinter.print(timeStamp, inEvents, removeEvents);
+                if (inEvents != null) {
+                    for (Event event : inEvents) {
+                        inEventCount++;
+                        switch (inEventCount) {
+                            case 1:
+                                Assert.assertEquals(event.getData(), new Object[] { "IBM", 200l, 55});
+                                break;
+                            default:
+                                Assert.assertEquals(2, inEventCount);
+                        }
+                    }
+                    eventArrived = true;
+                }
+                if (removeEvents != null) {
+                    removeEventCount = removeEventCount + removeEvents.length;
+                }
+                eventArrived = true;
+            }
+
+        });
+
+        InputHandler stockStream = executionPlanRuntime.getInputHandler("StockStream");
+        InputHandler checkStockStream = executionPlanRuntime.getInputHandler("CheckStockStream");
+
+        executionPlanRuntime.start();
+
+        stockStream.send(new Object[] { "WSO2", 55, 100l });
+        stockStream.send(new Object[] { "IBM", 155, 100l });
+        Thread.sleep(DEFAULT_WAIT_TIME);
+        checkStockStream.send(new Object[] { "IBM", 200l, 55 });
+        Thread.sleep(DEFAULT_WAIT_TIME);
+
+        Assert.assertEquals(inEventCount, 1);
+        Assert.assertEquals(removeEventCount, 0);
+        Assert.assertEquals(eventArrived, true);
+
+        executionPlanRuntime.shutdown();
+        siddhiManager.shutdown();
+
+        this.service.deleteTable(-1, "stocks");
+        this.cleanupCommonProps();
+    }
+
+    @Test
+    public void testFilter5() throws InterruptedException, AnalyticsException {
+        this.cleanupCommonProps();
+        this.service.deleteTable(-1, "stocks");
+        SiddhiManager siddhiManager = new SiddhiManager();
+
+        String streams = "" +
+                "define stream StockStream (symbol string, price float, volume long); " +
+                "define stream CheckStockStream (symbol string, volume long, price float); " +
+                "@from(eventtable = 'analytics.table' , table.name = 'stocks', indices = 'symbol, price, volume') " +
+                "@IndexBy('price')" +
+                "define table StockTable (symbol string, price float, volume long); ";
+
+        String query = "" +
+                "@info(name = 'query1') " +
+                "from StockStream " +
+                "insert into StockTable ;" +
+                "" +
+                "@info(name = 'query3') " +
+                "from CheckStockStream[(StockTable.volume >= 55 ) in StockTable] " +
+                "insert into OutStream;";
+
+        ExecutionPlanRuntime executionPlanRuntime = siddhiManager.createExecutionPlanRuntime(streams + query);
+
+        executionPlanRuntime.addCallback("query3", new QueryCallback() {
+            @Override
+            public void receive(long timeStamp, Event[] inEvents, Event[] removeEvents) {
+                EventPrinter.print(timeStamp, inEvents, removeEvents);
+                if (inEvents != null) {
+                    for (Event event : inEvents) {
+                        inEventCount++;
+                        switch (inEventCount) {
+                            case 1:
+                                Assert.assertEquals(event.getData(), new Object[] { "IBM", 200l, 55.0});
+                                break;
+                            default:
+                                Assert.assertEquals(2, inEventCount);
+                        }
+                    }
+                    eventArrived = true;
+                }
+                if (removeEvents != null) {
+                    removeEventCount = removeEventCount + removeEvents.length;
+                }
+                eventArrived = true;
+            }
+
+        });
+
+        InputHandler stockStream = executionPlanRuntime.getInputHandler("StockStream");
+        InputHandler checkStockStream = executionPlanRuntime.getInputHandler("CheckStockStream");
+
+        executionPlanRuntime.start();
+
+        stockStream.send(new Object[] { "WSO2", 55.0, 100l });
+        stockStream.send(new Object[] { "IBM", 155.0, 100l });
+        Thread.sleep(DEFAULT_WAIT_TIME);
+        checkStockStream.send(new Object[] { "IBM", 200l, 55.0 });
+        Thread.sleep(DEFAULT_WAIT_TIME);
+
+        Assert.assertEquals(inEventCount, 1);
+        Assert.assertEquals(removeEventCount, 0);
+        Assert.assertEquals(eventArrived, true);
+
+        executionPlanRuntime.shutdown();
+        siddhiManager.shutdown();
+
+        this.service.deleteTable(-1, "stocks");
+        this.cleanupCommonProps();
+    }
+
+    @Test
+    public void testFilter6() throws InterruptedException, AnalyticsException {
+        this.cleanupCommonProps();
+        this.service.deleteTable(-1, "stocks");
+        SiddhiManager siddhiManager = new SiddhiManager();
+
+        String streams = "" +
+                "define stream StockStream (symbol string, price int, volume long); " +
+                "define stream CheckStockStream (symbol string, volume long, price int); " +
+                "@from(eventtable = 'analytics.table' , table.name = 'stocks', indices = 'symbol, price, volume') " +
+                "@IndexBy('price')" +
+                "define table StockTable (symbol string, price int, volume long); ";
+
+        String query = "" +
+                "@info(name = 'query1') " +
+                "from StockStream " +
+                "insert into StockTable ;" +
+                "" +
+                "@info(name = 'query3') " +
+                "from CheckStockStream[((StockTable.symbol != 'WSO2') AND (StockTable.price != 155 )) in StockTable] " +
+                "insert into OutStream;";
+
+        ExecutionPlanRuntime executionPlanRuntime = siddhiManager.createExecutionPlanRuntime(streams + query);
+
+        executionPlanRuntime.addCallback("query3", new QueryCallback() {
+            @Override
+            public void receive(long timeStamp, Event[] inEvents, Event[] removeEvents) {
+                EventPrinter.print(timeStamp, inEvents, removeEvents);
+                if (inEvents != null) {
+                    for (Event event : inEvents) {
+                        inEventCount++;
+                        switch (inEventCount) {
+                            case 1:
+                                Assert.assertEquals(event.getData(), new Object[] { "IBM", 200l, 55});
+                                break;
+                            default:
+                                Assert.assertEquals(2, inEventCount);
+                        }
+                    }
+                    eventArrived = true;
+                }
+                if (removeEvents != null) {
+                    removeEventCount = removeEventCount + removeEvents.length;
+                }
+                eventArrived = true;
+            }
+
+        });
+
+        InputHandler stockStream = executionPlanRuntime.getInputHandler("StockStream");
+        InputHandler checkStockStream = executionPlanRuntime.getInputHandler("CheckStockStream");
+
+        executionPlanRuntime.start();
+
+        stockStream.send(new Object[] { "WSO2", 55, 100l });
+        stockStream.send(new Object[] { "IBM", 155, 100l });
+        Thread.sleep(DEFAULT_WAIT_TIME);
+        checkStockStream.send(new Object[] { "IBM", 200l, 55 });
+        Thread.sleep(DEFAULT_WAIT_TIME);
+
+        Assert.assertEquals(inEventCount, 1);
+        Assert.assertEquals(removeEventCount, 0);
+        Assert.assertEquals(eventArrived, true);
+
+        executionPlanRuntime.shutdown();
+        siddhiManager.shutdown();
+
+        this.service.deleteTable(-1, "stocks");
+        this.cleanupCommonProps();
+    }
+
+    @Test
+    public void testFilter7() throws InterruptedException, AnalyticsException {
+        this.cleanupCommonProps();
+        this.service.deleteTable(-1, "stocks");
+        SiddhiManager siddhiManager = new SiddhiManager();
+
+        String streams = "" +
+                "define stream StockStream (symbol string, price int, volume long); " +
+                "define stream CheckStockStream (symbol string, volume long, price int); " +
+                "@from(eventtable = 'analytics.table' , table.name = 'stocks', indices = 'symbol, price, volume') " +
+                "@IndexBy('price')" +
+                "define table StockTable (symbol string, price int, volume long); ";
+
+        String query = "" +
+                "@info(name = 'query1') " +
+                "from StockStream " +
+                "insert into StockTable ;" +
+                "" +
+                "@info(name = 'query3') " +
+                "from CheckStockStream[(StockTable.symbol == 'WSO2' ) in StockTable] " +
+                "insert into OutStream;";
+
+        ExecutionPlanRuntime executionPlanRuntime = siddhiManager.createExecutionPlanRuntime(streams + query);
+
+        executionPlanRuntime.addCallback("query3", new QueryCallback() {
+            @Override
+            public void receive(long timeStamp, Event[] inEvents, Event[] removeEvents) {
+                EventPrinter.print(timeStamp, inEvents, removeEvents);
+                if (inEvents != null) {
+                    for (Event event : inEvents) {
+                        inEventCount++;
+                        switch (inEventCount) {
+                            case 1:
+                                Assert.assertEquals(event.getData(), new Object[] { "IBM", 200l, 55});
+                                break;
+                            default:
+                                Assert.assertEquals(2, inEventCount);
+                        }
+                    }
+                    eventArrived = true;
+                }
+                if (removeEvents != null) {
+                    removeEventCount = removeEventCount + removeEvents.length;
+                }
+                eventArrived = true;
+            }
+
+        });
+
+        InputHandler stockStream = executionPlanRuntime.getInputHandler("StockStream");
+        InputHandler checkStockStream = executionPlanRuntime.getInputHandler("CheckStockStream");
+
+        executionPlanRuntime.start();
+
+        stockStream.send(new Object[] { "WSO2", 55, 100l });
+        stockStream.send(new Object[] { "IBM", 155, 100l });
+        Thread.sleep(DEFAULT_WAIT_TIME);
+        checkStockStream.send(new Object[] { "IBM", 200l, 55 });
+        Thread.sleep(DEFAULT_WAIT_TIME);
+
+        Assert.assertEquals(inEventCount, 1);
+        Assert.assertEquals(removeEventCount, 0);
+        Assert.assertEquals(eventArrived, true);
+
+        executionPlanRuntime.shutdown();
+        siddhiManager.shutdown();
+
+        this.service.deleteTable(-1, "stocks");
+        this.cleanupCommonProps();
+    }
+
+    @Test(enabled = false)
+    public void testInsertOverwrite1() throws InterruptedException, AnalyticsTableNotAvailableException, AnalyticsException {
+        this.cleanupCommonProps();
+        this.service.deleteTable(-1, "stocks");
+        SiddhiManager siddhiManager = new SiddhiManager();
+
+        String streams = "" +
+                "define stream StockStream (symbol string, price float, volume long); " +
+                "define stream UpdateStockStream (symbol string, price float, volume long); " +
+                "@from(eventtable = 'analytics.table' , table.name = 'stocks', indices = 'symbol') " +
+                "define table StockTable (symbol string, price float, volume long); ";
+        String query = "" +
+                "@info(name = 'query1') " +
+                "from StockStream " +
+                "insert into StockTable ;" +
+                "" +
+                "@info(name = 'query2') " +
+                "from UpdateStockStream " +
+                "insert overwrite StockTable " +
+                "   on StockTable.symbol == symbol ;";
+
+        ExecutionPlanRuntime executionPlanRuntime = siddhiManager.createExecutionPlanRuntime(streams + query);
+
+        InputHandler stockStream = executionPlanRuntime.getInputHandler("StockStream");
+        InputHandler updateStockStream = executionPlanRuntime.getInputHandler("UpdateStockStream");
+
+        executionPlanRuntime.start();
+
+        stockStream.send(new Object[] { "WSO2", 55.6f, 100l });
+        Thread.sleep(DEFAULT_WAIT_TIME);
+
+        updateStockStream.send(new Object[] { "IBM", 99.6f, 100l });
+        Thread.sleep(DEFAULT_WAIT_TIME);
+
+        List<Record> recordsIn = AnalyticsDataServiceUtils.listRecords(this.service,
+                this.service.get(-1, "stocks", 1, null, Long.MIN_VALUE, Long.MAX_VALUE, 0, -1));
+        Assert.assertEquals(recordsIn.size(), 2);
+        List<SearchResultEntry> result = this.service.search(-1, "stocks", "symbol: IBM", 0, 1);
+        Assert.assertEquals(result.size(), 1);
+        String id = result.get(0).getId();
+        recordsIn = AnalyticsDataServiceUtils.listRecords(this.service,
+                this.service.get(-1, "stocks", 1, null, Arrays.asList(id)));
+        Assert.assertEquals(recordsIn.get(0).getValue("price"), 99.6f);
+        this.service.deleteTable(-1, "stocks");
+        this.cleanupCommonProps();
+    }
+
+    @Test
+    public void testInsertOverwrite2() throws InterruptedException, AnalyticsTableNotAvailableException, AnalyticsException {
+        this.cleanupCommonProps();
+        this.service.deleteTable(-1, "stocks");
+        SiddhiManager siddhiManager = new SiddhiManager();
+
+        String streams = "" +
+                "define stream StockStream (symbol string, price float, volume long); " +
+                "define stream UpdateStockStream (symbol string, price float, volume long); " +
+                "@from(eventtable = 'analytics.table' , table.name = 'stocks', indices = 'symbol') " +
+                "define table StockTable (symbol string, price float, volume long); ";
+        String query = "" +
+                "@info(name = 'query1') " +
+                "from StockStream " +
+                "insert into StockTable ;" +
+                "" +
+                "@info(name = 'query2') " +
+                "from UpdateStockStream " +
+                "insert overwrite StockTable " +
+                "   on StockTable.symbol == symbol ;";
+
+        ExecutionPlanRuntime executionPlanRuntime = siddhiManager.createExecutionPlanRuntime(streams + query);
+
+        InputHandler stockStream = executionPlanRuntime.getInputHandler("StockStream");
+        InputHandler updateStockStream = executionPlanRuntime.getInputHandler("UpdateStockStream");
+
+        executionPlanRuntime.start();
+
+        stockStream.send(new Object[] { "WSO2", 55.6f, 100l });
+        stockStream.send(new Object[] { "IBM", 75.6f, 100l });
+        stockStream.send(new Object[] { "WSO2", 57.6f, 100l });
+        Thread.sleep(DEFAULT_WAIT_TIME);
+
+        updateStockStream.send(new Object[] { "IBM", 99.6f, 100l });
+        Thread.sleep(DEFAULT_WAIT_TIME);
+
+        List<Record> recordsIn = AnalyticsDataServiceUtils.listRecords(this.service,
+                this.service.get(-1, "stocks", 1, null, Long.MIN_VALUE, Long.MAX_VALUE, 0, -1));
+        Assert.assertEquals(recordsIn.size(), 3);
+        List<SearchResultEntry> result = this.service.search(-1, "stocks", "symbol: IBM", 0, 1);
+        Assert.assertEquals(result.size(), 1);
+        String id = result.get(0).getId();
+        recordsIn = AnalyticsDataServiceUtils.listRecords(this.service,
+                this.service.get(-1, "stocks", 1, null, Arrays.asList(id)));
+        Assert.assertEquals(recordsIn.get(0).getValue("price"), 99.6f);
+        this.service.deleteTable(-1, "stocks");
+        this.cleanupCommonProps();
+    }
 }
