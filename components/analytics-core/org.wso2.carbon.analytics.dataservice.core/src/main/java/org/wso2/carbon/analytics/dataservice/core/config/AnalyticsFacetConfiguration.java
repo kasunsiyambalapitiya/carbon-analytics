@@ -73,4 +73,8 @@ public class AnalyticsFacetConfiguration {
     public AnalyticsFacetTableConfiguration[] getFacetTableConfigurations() {
         return facetTableConfigurations;
     }
+
+    public void setFacetTableConfigurations(AnalyticsFacetTableConfiguration[] facetTableConfigurations) {
+        this.facetTableConfigurations = facetTableConfigurations;
+    }
 }
