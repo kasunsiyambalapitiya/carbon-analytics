@@ -75,6 +75,9 @@ import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -557,8 +560,7 @@ public class SparkAnalyticsExecutor implements GroupEventListener {
             log.info("CARBON HOME set with the symbolic link " + carbonHome);
             //Get target path
             Path CarbonHomePath = Files.readSymbolicLink(Paths.get(carbonHome));
-            File dir = new File(CarbonHomePath.toString());
-            if (!dir.exists()) {
+            if (!Files.exists(CarbonHomePath)) {
                 throw new AnalyticsExecutionException("Unable to create the extra spark classpath with CarbonHome "
                         + "specified, does not exist : " + carbonHome);
             }

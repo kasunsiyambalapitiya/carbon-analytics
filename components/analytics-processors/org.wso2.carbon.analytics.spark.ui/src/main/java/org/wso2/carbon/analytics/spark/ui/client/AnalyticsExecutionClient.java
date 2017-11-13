@@ -97,7 +97,7 @@ public class AnalyticsExecutionClient {
     }
 
     public AnalyticsProcessorAdminServiceStub.AnalyticsQueryResultDto[] executeScriptContent(String scriptContent)
-            throws RemoteException, AnalyticsProcessorAdminServiceAnalyticsProcessorAdminExceptionException {
+            throws Exception {
         try {
             return stub.execute(scriptContent);
         } catch (AnalyticsProcessorAdminServiceAnalyticsProcessorAdminExceptionException e) {
@@ -111,7 +111,7 @@ public class AnalyticsExecutionClient {
     }
 
     public AnalyticsProcessorAdminServiceStub.AnalyticsQueryResultDto[] executeScript(String scriptName)
-            throws RemoteException, AnalyticsProcessorAdminServiceAnalyticsProcessorAdminExceptionException {
+            throws Exception {
         try {
             return stub.executeScript(scriptName);
         } catch (AnalyticsProcessorAdminServiceAnalyticsProcessorAdminExceptionException e) {
