@@ -75,6 +75,9 @@ import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -554,13 +557,21 @@ public class SparkAnalyticsExecutor implements GroupEventListener {
         String carbonHome = null, carbonConfDir, analyticsSparkConfDir;
         try {
             carbonHome = conf.get(AnalyticsConstants.CARBON_DAS_SYMBOLIC_LINK);
-            logDebug("CARBON HOME set with the symbolic link " + carbonHome);
+            log.info("CARBON HOME set with the symbolic link " + carbonHome);
+            //Get target path
+            Path CarbonHomePath = Files.readSymbolicLink(Paths.get(carbonHome));
+            if (!Files.exists(CarbonHomePath)) {
+                throw new AnalyticsExecutionException("Unable to create the extra spark classpath with CarbonHome "
+                        + "specified, does not exist : " + carbonHome);
+            }
         } catch (NoSuchElementException e) {
             try {
                 carbonHome = CarbonUtils.getCarbonHome();
             } catch (Throwable ex) {
                 logDebug("CARBON HOME can not be found. Spark conf in non-carbon environment");
             }
+        }catch (IOException e) {
+            throw new AnalyticsExecutionException("Symbolic link specified is invalid: " + carbonHome);
         }
         logDebug("CARBON HOME used for Spark Conf : " + carbonHome);
 
