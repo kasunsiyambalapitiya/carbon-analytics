@@ -558,8 +558,7 @@ public class SparkAnalyticsExecutor implements GroupEventListener {
         try {
             carbonHome = conf.get(AnalyticsConstants.CARBON_DAS_SYMBOLIC_LINK);
             log.info("CARBON HOME set with the symbolic link " + carbonHome);
-            //Get target path
-            Path CarbonHomePath = Files.readSymbolicLink(Paths.get(carbonHome));
+            Path CarbonHomePath = Paths.get(carbonHome);
             if (!Files.exists(CarbonHomePath)) {
                 throw new AnalyticsExecutionException("Unable to create the extra spark classpath with CarbonHome "
                         + "specified, does not exist : " + carbonHome);
@@ -570,8 +569,6 @@ public class SparkAnalyticsExecutor implements GroupEventListener {
             } catch (Throwable ex) {
                 logDebug("CARBON HOME can not be found. Spark conf in non-carbon environment");
             }
-        }catch (IOException e) {
-            throw new AnalyticsExecutionException("Symbolic link specified is invalid: " + carbonHome);
         }
         logDebug("CARBON HOME used for Spark Conf : " + carbonHome);
 
