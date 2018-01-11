@@ -18,6 +18,7 @@
  */
 package org.wso2.carbon.analytics.dataservice.core.indexing;
 
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.hazelcast.nio.ObjectDataInput;
 import com.hazelcast.nio.ObjectDataOutput;
 import com.hazelcast.nio.serialization.DataSerializable;
@@ -55,12 +56,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.concurrent.locks.Lock;
 
 /**
@@ -98,8 +94,11 @@ public class IndexNodeCoordinator implements GroupEventListener {
 
     private boolean indexingNode = false;
 
-    /* this executor is specifically used, rather than a single thread executor, so there won't be a thread always live, mostly unused */
-    private ExecutorService localShardProcessExecutor = new ThreadPoolExecutor(0, 1, 0L, TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>());
+    /* this executor is specifically used, rather than a single thread executor, so there won't be a thread always live,
+     mostly unused */
+    private ExecutorService localShardProcessExecutor = new ThreadPoolExecutor(0, 1,
+            0L, TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>(),new ThreadFactoryBuilder().
+            setNameFormat("Thread pool- component - IndexNodeCoordinator.localShardProcessExecutor").build());
 
     public IndexNodeCoordinator(AnalyticsDataIndexer indexer) throws AnalyticsException {
         this.indexer = indexer;
@@ -680,7 +679,9 @@ public class IndexNodeCoordinator implements GroupEventListener {
         if (localShardIndices.length == 0) {
             return;
         }
-        this.stagingWorkerExecutor = Executors.newFixedThreadPool(localShardIndices.length);
+        this.stagingWorkerExecutor = Executors.newFixedThreadPool(localShardIndices.length,
+                new ThreadFactoryBuilder().
+                setNameFormat("Thread pool- component - IndexNodeCoordinator.stagingWorkerExecutor").build());
         this.stagingIndexWorkers = new ArrayList<>(localShardIndices.length);
         for (int shardIndex : localShardIndices) {
             StagingDataIndexWorker worker = new StagingDataIndexWorker(shardIndex);
