@@ -83,4 +83,5 @@ public class Constants {
             + File.separator + "conf" + File.separator + "analytics" + File.separator + "my-node-id.dat";
     public static final String DEFAULT_LOCAL_INDEX_STAGING_LOCATION = AnalyticsDataSourceConstants.CARBON_HOME_VAR + File.separator + "repository"
             + File.separator + "data" + File.separator + "index_staging_queues" + File.separator;
+    public static final boolean DEFAULT_LOWERCASE_EXPANDED_TERMS = true;
 }
