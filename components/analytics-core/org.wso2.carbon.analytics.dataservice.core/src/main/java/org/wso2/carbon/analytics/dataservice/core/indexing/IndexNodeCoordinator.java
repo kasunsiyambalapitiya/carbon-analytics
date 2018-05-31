@@ -102,7 +102,7 @@ public class IndexNodeCoordinator implements GroupEventListener {
     /* this executor is specifically used, rather than a single thread executor, so there won't be a thread always live,
      mostly unused */
     private ExecutorService localShardProcessExecutor = new ThreadPoolExecutor(0, 1,
-            0L, TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>(),new ThreadFactoryBuilder().
+            0L, TimeUnit.SECONDS, new LinkedBlockingQueue<Runnable>(), new ThreadFactoryBuilder().
             setNameFormat("Thread pool- component - IndexNodeCoordinator.localShardProcessExecutor").build());
 
     public IndexNodeCoordinator(AnalyticsDataIndexer indexer) throws AnalyticsException {
@@ -110,7 +110,7 @@ public class IndexNodeCoordinator implements GroupEventListener {
         this.localShardAllocationConfig = new LocalShardAllocationConfig();
         this.globalShardAllocationConfig = new GlobalShardAllocationConfig(this.indexer.getAnalyticsRecordStore());
         this.shardMemberMap = new GlobalShardMemberMapping(this.indexer.getShardCount(),
-                                                           this.globalShardAllocationConfig);
+                this.globalShardAllocationConfig);
         this.stagingIndexDataStore = new StagingIndexDataStore(this.indexer);
         this.remoteCommunicator = new RemoteMemberIndexCommunicator(indexer.getAnalyticsIndexerInfo()
                 .getIndexCommunicatorBufferSize(), this.stagingIndexDataStore);
@@ -232,7 +232,7 @@ public class IndexNodeCoordinator implements GroupEventListener {
         }
         this.syncLocalWithGlobal();
     }
-    
+
     public void init() throws AnalyticsException {
         this.indexingNode = checkIfIndexingNode();
         this.populateMyNodeId();
@@ -343,7 +343,7 @@ public class IndexNodeCoordinator implements GroupEventListener {
         for (Map.Entry<Integer, List<String>> entry : shardedIds.entrySet()) {
             Set<String> nodeIds = this.shardMemberMap.getNodeIdsForShard(entry.getKey());
             for (String nodeId : nodeIds) {
-                if (this.myNodeId.equals(nodeId) && this.indexingNode ) {
+                if (this.myNodeId.equals(nodeId) && this.indexingNode) {
                     localIds.addAll(entry.getValue());
                 } else {
                     Object memberNode = this.shardMemberMap.getMemberFromNodeId(nodeId);
@@ -406,7 +406,7 @@ public class IndexNodeCoordinator implements GroupEventListener {
                 this.remoteCommunicator.put(member, records, nodeId);
             }
         } catch (Exception e) {
-            String msg = "Error in sending remote record batch put to member: " + member + 
+            String msg = "Error in sending remote record batch put to member: " + member +
                     " with node id: " + nodeId + ": " + e.getMessage() + " -> adding to staging area for later pickup..";
             if (!this.suppressWarnMessagesInactiveMembers.contains(nodeId)) {
                 log.warn(msg);
@@ -438,7 +438,7 @@ public class IndexNodeCoordinator implements GroupEventListener {
                 this.remoteCommunicator.delete(member, tenantId, tableName, ids);
             }
         } catch (Exception e) {
-            String msg = "Error in sending remote record batch delete to member: " + member + 
+            String msg = "Error in sending remote record batch delete to member: " + member +
                     "with node id: " + nodeId + ": " + e.getMessage() + " -> adding to staging area for later pickup..";
             if (!this.suppressWarnMessagesInactiveMembers.contains(nodeId)) {
                 log.warn(msg);
@@ -466,7 +466,7 @@ public class IndexNodeCoordinator implements GroupEventListener {
         }
         AnalyticsDataService ads = AnalyticsServiceHolder.getAnalyticsDataService();
         AnalyticsDataResponse resp = ads.get(tableId.getTenantId(), tableId.getTableName(), 1, null,
-                                             Long.MIN_VALUE, Long.MAX_VALUE, 0, -1);
+                Long.MIN_VALUE, Long.MAX_VALUE, 0, -1);
         Iterator<Record> itr = AnalyticsDataServiceUtils.responseToIterator(ads, resp);
         List<Record> records = new ArrayList<>(Constants.RECORDS_BATCH_SIZE);
         Record record;
@@ -646,7 +646,7 @@ public class IndexNodeCoordinator implements GroupEventListener {
         this.suppressWarnMessagesInactiveMembers.clear();
         AnalyticsClusterManager acm = AnalyticsServiceHolder.getAnalyticsClusterManager();
         List<LocalShardAddressInfo> result = acm.executeAll(Constants.ANALYTICS_INDEXING_GROUP,
-                                                            new QueryLocalShardsAndAddressCall());
+                new QueryLocalShardsAndAddressCall());
         for (LocalShardAddressInfo entry : result) {
             this.shardMemberMap.updateMemberMapping(entry);
         }
@@ -686,7 +686,7 @@ public class IndexNodeCoordinator implements GroupEventListener {
         }
         this.stagingWorkerExecutor = Executors.newFixedThreadPool(localShardIndices.length,
                 new ThreadFactoryBuilder().
-                setNameFormat("Thread pool- component - IndexNodeCoordinator.stagingWorkerExecutor").build());
+                        setNameFormat("Thread pool- component - IndexNodeCoordinator.stagingWorkerExecutor").build());
         this.stagingIndexWorkers = new ArrayList<>(localShardIndices.length);
         for (int shardIndex : localShardIndices) {
             StagingDataIndexWorker worker = new StagingDataIndexWorker(shardIndex);
@@ -718,8 +718,8 @@ public class IndexNodeCoordinator implements GroupEventListener {
             this.syncLocalWithGlobal();
         }
         log.info("Indexing Initialized: " + (this.isClusteringEnabled() ?
-                                             "CLUSTERED " + this.shardMemberMap : "STANDALONE") + " | Current Node Indexing: " +
-                 (this.indexingNode ? "Yes" : "No"));
+                "CLUSTERED " + this.shardMemberMap : "STANDALONE") + " | Current Node Indexing: " +
+                (this.indexingNode ? "Yes" : "No"));
     }
 
     public void waitForIndexing(long maxWait) throws AnalyticsException {
@@ -950,10 +950,17 @@ public class IndexNodeCoordinator implements GroupEventListener {
     }
 
     private void processStagingEntry(int shardIndex, StagingIndexDataEntry entry) throws AnalyticsException {
+        log.info("=============================================================================================");
+        log.info("shardIndex is : " + shardIndex);
         try {
             AnalyticsDataService ads = this.indexer.getAnalyticsDataService();
+            log.info("entry.getTenantId() : " + entry.getTenantId());
+            log.info("entry.getTableName() : " + entry.getTableName());
+            log.info("entry.getIds() : " + entry.getIds());
+
             List<Record> records = AnalyticsDataServiceUtils.listRecords(ads,
-                                                                         ads.get(entry.getTenantId(), entry.getTableName(), 1, null, entry.getIds()));
+                    ads.get(entry.getTenantId(), entry.getTableName(), 1, null, entry.getIds()));
+            log.info("List of records : " + Arrays.toString(records.toArray()));
             this.indexer.putLocal(records);
             Set<String> deleteIds = new HashSet<>(entry.getIds());
             deleteIds.removeAll(this.extractIds(records));
@@ -967,6 +974,7 @@ public class IndexNodeCoordinator implements GroupEventListener {
             throw new AnalyticsException("Error in processing index staging entry: " + e.getMessage(), e);
         }
         this.stagingIndexDataStore.removeEntries(this.myNodeId, shardIndex, Arrays.asList(entry.getRecordId()));
+        log.info("=============================================================================================");
     }
 
     private Set<String> extractIds(List<Record> records) {
